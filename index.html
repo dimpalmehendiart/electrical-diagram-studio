@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mermaid Diagram Studio</title>
+  <meta name="description" content="A simple browser-based Mermaid flowchart editor for electrical diagrams and more.">
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    window.mermaid = mermaid;
+    mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "strict", flowchart: { curve: "basis", htmlLabels: true } });
+    window.dispatchEvent(new Event("mermaid-ready"));
+  </script>
+  <style>
+    :root { color-scheme: light; --ink:#172033; --muted:#64748b; --line:#dbe2ea; --blue:#2457d6; --bg:#f4f7fb; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--ink); background:var(--bg); }
+    header { padding:22px clamp(16px,4vw,42px); background:#101b32; color:white; }
+    header h1 { margin:0 0 4px; font-size:clamp(22px,3vw,30px); }
+    header p { margin:0; color:#cbd5e1; }
+    main { max-width:1500px; margin:auto; padding:22px clamp(12px,3vw,32px) 40px; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:9px; align-items:center; margin-bottom:14px; }
+    button, select { border:1px solid var(--line); border-radius:9px; padding:9px 13px; background:white; color:var(--ink); font:inherit; cursor:pointer; }
+    button.primary { background:var(--blue); color:white; border-color:var(--blue); }
+    button:hover { filter:brightness(.97); }
+    .hint { color:var(--muted); font-size:13px; margin-left:auto; }
+    .workspace { display:grid; grid-template-columns:minmax(280px, .85fr) minmax(320px, 1.4fr); gap:14px; align-items:stretch; }
+    .panel { background:white; border:1px solid var(--line); border-radius:13px; overflow:hidden; min-width:0; }
+    .panel-head { display:flex; justify-content:space-between; align-items:center; padding:12px 15px; border-bottom:1px solid var(--line); font-weight:650; }
+    textarea { display:block; width:100%; min-height:590px; resize:vertical; border:0; outline:0; padding:16px; font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; color:#172033; tab-size:2; }
+    #canvas { min-height:590px; padding:20px; overflow:auto; display:flex; align-items:flex-start; justify-content:center; }
+    #canvas svg { max-width:100%; height:auto; }
+    #placeholder { color:var(--muted); align-self:center; text-align:center; }
+    #status { padding:9px 15px; border-top:1px solid var(--line); color:var(--muted); font-size:13px; white-space:pre-wrap; }
+    .error { color:#b42318 !important; }
+    .foot { color:var(--muted); font-size:13px; margin-top:15px; }
+    .foot code { background:#e8edf5; padding:2px 5px; border-radius:4px; }
+    @media (max-width:850px) { .workspace { grid-template-columns:1fr; } textarea { min-height:360px; } #canvas { min-height:380px; } .hint { width:100%; margin-left:0; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Mermaid Diagram Studio</h1>
+    <p>Paste Mermaid code, render it as a diagram, then export the result as SVG.</p>
+  </header>
+  <main>
+    <div class="toolbar">
+      <button class="primary" id="renderBtn">Render diagram</button>
+      <button id="ltBtn">Load LT motor example</button>
+      <button id="htBtn">Load HT motor example</button>
+      <button id="clearBtn">Clear</button>
+      <button id="svgBtn">Download SVG</button>
+      <button id="codeBtn">Download .mmd</button>
+      <label class="hint">Diagram theme:
+        <select id="theme">
+          <option value="default">Default</option>
+          <option value="neutral">Neutral</option>
+          <option value="forest">Forest</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+    </div>
+    <div class="workspace">
+      <section class="panel">
+        <div class="panel-head"><span>Mermaid code editor</span><span style="font-size:12px;color:#64748b">.mmd syntax</span></div>
+        <textarea id="source" spellcheck="false" aria-label="Mermaid diagram source"></textarea>
+        <div id="sourceStatus" class="foot" style="padding:0 15px 12px">Edit the Mermaid code and select “Render diagram”.</div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><span>Diagram preview</span><span style="font-size:12px;color:#64748b">Rendered SVG</span></div>
+        <div id="canvas"><div id="placeholder">Your diagram will appear here.</div></div>
+        <div id="status" role="status">Ready.</div>
+      </section>
+    </div>
+    <p class="foot">
+      This page uses <strong>Mermaid</strong> (specifically, <code>flowchart</code> syntax). It loads Mermaid from jsDelivr, so an internet connection is required when opening the page. The source code stays in your browser; it is not uploaded by this page.
+    </p>
+  </main>
+<script>
+const ltExample = `flowchart TD
+    A["415 V LT BUS"] --> B["ACB / MCCB"]
+    B --> C["Motor Starter"]
+    C --> D["Overload Relay"]
+    D --> E["134 kW LT MOTOR"]
+
+    C --- F["DOL / Star-Delta / Soft Starter"]
+    G["CTs / Current Sensing"] --> H["LT Protection Relay"]
+    D --> H
+    I["Voltage / Phase Monitoring"] --> H
+    H --> J["TRIP COMMAND"]
+    J --> B
+    J --> C
+
+    style A fill:#dbeafe,stroke:#2563eb,color:#111
+    style E fill:#dcfce7,stroke:#16a34a,color:#111
+    style H fill:#fef3c7,stroke:#d97706,color:#111`;
+
+const htExample = `flowchart TD
+    A["6.6 kV HT BUS"] --> B["VCB - Vacuum Circuit Breaker"]
+    B --> C["CTs - Current Transformers"]
+    C --> D["HT Starting Arrangement"]
+    D --> E["6.6 kV HT MOTOR"]
+
+    D --- F["DOL / Reactor / Autotransformer / Soft Starter / VFD"]
+
+    C --> G["Numerical Motor Protection Relay"]
+    H["VT / PT Voltage Sensing"] --> G
+    I["Motor RTDs / Bearing Temperature"] --> G
+    G --> J["TRIP CIRCUIT"]
+    J --> B
+
+    K["Electrical & Mechanical Interlocks"] --> D
+
+    style A fill:#dbeafe,stroke:#2563eb,color:#111
+    style E fill:#dcfce7,stroke:#16a34a,color:#111
+    style G fill:#fef3c7,stroke:#d97706,color:#111
+    style B fill:#fee2e2,stroke:#dc2626,color:#111`;
+
+const source = document.getElementById("source");
+const canvas = document.getElementById("canvas");
+const status = document.getElementById("status");
+const theme = document.getElementById("theme");
+let lastSvg = "";
+
+function setStatus(message, isError=false) {
+  status.textContent = message;
+  status.classList.toggle("error", isError);
+}
+async function renderDiagram() {
+  if (!window.mermaid) {
+    setStatus("Mermaid is still loading. Check your internet connection and try again.", true);
+    return;
+  }
+  const code = source.value.trim();
+  if (!code) {
+    canvas.innerHTML = '<div id="placeholder">Paste Mermaid code into the editor first.</div>';
+    lastSvg = "";
+    setStatus("Nothing to render.");
+    return;
+  }
+  try {
+    window.mermaid.initialize({
+      startOnLoad: false,
+      theme: theme.value,
+      securityLevel: "strict",
+      flowchart: { curve: "basis", htmlLabels: true }
+    });
+    const id = "diagram-" + Date.now();
+    const result = await window.mermaid.render(id, code);
+    canvas.innerHTML = result.svg;
+    lastSvg = result.svg;
+    if (result.bindFunctions) result.bindFunctions(canvas);
+    setStatus("Diagram rendered successfully.");
+  } catch (err) {
+    lastSvg = "";
+    setStatus("Could not render this Mermaid code:\n" + (err?.message || String(err)), true);
+  }
+}
+function download(filename, content, type) {
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+document.getElementById("renderBtn").addEventListener("click", renderDiagram);
+document.getElementById("ltBtn").addEventListener("click", () => { source.value = ltExample; renderDiagram(); });
+document.getElementById("htBtn").addEventListener("click", () => { source.value = htExample; renderDiagram(); });
+document.getElementById("clearBtn").addEventListener("click", () => { source.value = ""; renderDiagram(); });
+document.getElementById("svgBtn").addEventListener("click", () => {
+  if (!lastSvg) return setStatus("Render a diagram before downloading SVG.", true);
+  download("mermaid-diagram.svg", lastSvg, "image/svg+xml;charset=utf-8");
+});
+document.getElementById("codeBtn").addEventListener("click", () => {
+  if (!source.value.trim()) return setStatus("There is no Mermaid code to download.", true);
+  download("diagram.mmd", source.value, "text/plain;charset=utf-8");
+});
+theme.addEventListener("change", renderDiagram);
+source.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") renderDiagram();
+});
+window.addEventListener("mermaid-ready", () => {
+  source.value = ltExample;
+  renderDiagram();
+});
+</script>
+</body>
+</html>
